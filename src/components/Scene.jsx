@@ -24,11 +24,10 @@ const _lookAt = new THREE.Vector3()
 export default function Scene({ timelineRef, onPhaseChange }) {
   const { camera, scene } = useThree()
 
-  // Initialize scene.userData defaults
   if (!scene.userData.initialized) {
     scene.userData.initialized = true
     scene.userData.phase = 'IDLE'
-    scene.userData.agitation = 1.0
+    scene.userData.agitation = 0.0
     scene.userData.dustPos = [-7, 0, 0]
     scene.userData.ribbonPos = [7, 0, 0]
     scene.userData.bloomIntensity = 1.5
@@ -41,13 +40,28 @@ export default function Scene({ timelineRef, onPhaseChange }) {
     // --- Phase transitions ---
     switch (tl.phase) {
       case 'IDLE':
-        if (tl.started) { tl.phase = 'SWIPE'; tl.phaseElapsed = 0 }
+        if (tl.started) {
+          tl.phase = 'DUST_TEXT'; tl.phaseElapsed = 0
+          onPhaseChange('DUST_TEXT')
+        }
+        break
+      case 'DUST_TEXT':
+        if (tl.phaseElapsed > 4.5) {
+          tl.phase = 'SWIPE'; tl.phaseElapsed = 0
+          onPhaseChange('RUNNING')
+        }
         break
       case 'SWIPE':
-        if (tl.phaseElapsed > 0.4) { tl.phase = 'RIBBONS'; tl.phaseElapsed = 0 }
+        if (tl.phaseElapsed > 0.4) {
+          tl.phase = 'RIBBON_TEXT'; tl.phaseElapsed = 0
+          onPhaseChange('RIBBON_TEXT')
+        }
         break
-      case 'RIBBONS':
-        if (tl.phaseElapsed > 4.0) { tl.phase = 'ZOOM_OUT'; tl.phaseElapsed = 0 }
+      case 'RIBBON_TEXT':
+        if (tl.phaseElapsed > 4.5) {
+          tl.phase = 'ZOOM_OUT'; tl.phaseElapsed = 0
+          onPhaseChange('RUNNING')
+        }
         break
       case 'ZOOM_OUT':
         if (tl.phaseElapsed > 3.0) { tl.phase = 'APPROACH'; tl.phaseElapsed = 0 }
@@ -57,15 +71,13 @@ export default function Scene({ timelineRef, onPhaseChange }) {
         break
       case 'EXPLOSION':
         if (tl.phaseElapsed > 2.5) {
-          tl.phase = 'SETTLE'
-          tl.phaseElapsed = 0
-          onPhaseChange('CALM') // text fades in during SETTLE via CSS delay
+          tl.phase = 'SETTLE'; tl.phaseElapsed = 0
+          onPhaseChange('CALM')
         }
         break
       case 'SETTLE':
         if (tl.phaseElapsed > 6.0) {
-          tl.phase = 'CALM'
-          tl.phaseElapsed = 0
+          tl.phase = 'CALM'; tl.phaseElapsed = 0
         }
         break
     }
@@ -87,11 +99,15 @@ export default function Scene({ timelineRef, onPhaseChange }) {
     }
 
     // --- Agitation ---
-    let agitation = 1.0
-    if (p === 'SETTLE') {
+    // IDLE + DUST_TEXT = calm (0); RIBBON_TEXT onward = agitated (1) until SETTLE
+    let agitation = 0.0
+    if (p === 'RIBBON_TEXT' || p === 'ZOOM_OUT' || p === 'APPROACH' || p === 'EXPLOSION') {
+      agitation = 1.0
+    } else if (p === 'SWIPE') {
+      // brief ramp-up so ribbons are already agitated when camera arrives
+      agitation = easeInOut(Math.min(elapsed / 0.4, 1))
+    } else if (p === 'SETTLE') {
       agitation = 1.0 - smoothstep(Math.min(elapsed / 6.0, 1))
-    } else if (p === 'CALM') {
-      agitation = 0.0
     }
 
     // --- Bloom intensity ---
@@ -108,6 +124,7 @@ export default function Scene({ timelineRef, onPhaseChange }) {
 
     switch (p) {
       case 'IDLE':
+      case 'DUST_TEXT':
         camX = -7; camZ = 12; lookX = -7
         break
       case 'SWIPE': {
@@ -117,7 +134,7 @@ export default function Scene({ timelineRef, onPhaseChange }) {
         camZ = 12
         break
       }
-      case 'RIBBONS':
+      case 'RIBBON_TEXT':
         camX = 7; camZ = 12; lookX = 7
         break
       case 'ZOOM_OUT': {
@@ -154,7 +171,6 @@ export default function Scene({ timelineRef, onPhaseChange }) {
     _lookAt.set(lookX, 0, 0)
     camera.lookAt(_lookAt)
 
-    // --- Push state to scene.userData for child components ---
     scene.userData.phase = p
     scene.userData.agitation = agitation
     scene.userData.dustPos = dustPos
