@@ -1,10 +1,10 @@
 import { useRef, useMemo } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { createNoise3D } from 'simplex-noise'
 
 const RIBBON_COUNT = 30
 const TRAIL_LENGTH = 80
+const SPHERE_RADIUS = 4.5
 
 function makeRng(seed) {
   let s = (seed * 12345 + 999) | 0
@@ -17,121 +17,57 @@ function makeRng(seed) {
   }
 }
 
-// Fibonacci sphere distribution
-function fibSphereDir(i, n) {
-  const goldenAngle = Math.PI * (3 - Math.sqrt(5))
-  const y = 1 - (i / (n - 1)) * 2
-  const r = Math.sqrt(Math.max(0, 1 - y * y))
-  const theta = goldenAngle * i
-  return new THREE.Vector3(r * Math.cos(theta), y, r * Math.sin(theta)).normalize()
-}
-
-// Pre-allocated scratch vectors to reduce allocations in useFrame
-const _headLocal = new THREE.Vector3()
-const _homeTarget = new THREE.Vector3()
-const _pullVec = new THREE.Vector3()
-const _spikeVec = new THREE.Vector3()
-const _noiseDir = new THREE.Vector3()
-const _tangent = new THREE.Vector3()
-const _upAxis = new THREE.Vector3(0, 1, 0)
-const _moveDelta = new THREE.Vector3()
+// Pre-allocated scratch
+const _normal = new THREE.Vector3()
 const _col = new THREE.Color()
 
-function SingleRibbon({ ribbonIndex, homeDir, noiseOffset, groupRef }) {
+function SingleRibbon({ ribbonIndex, startPos, startVel }) {
   const { scene } = useThree()
   const lineRef = useRef()
-
-  const noise3D = useMemo(() => {
-    const rng = makeRng(ribbonIndex * 999 + 7777)
-    return createNoise3D(rng)
-  }, [ribbonIndex])
+  const headRef = useRef(startPos.clone())
+  const velRef = useRef(startVel.clone())
 
   const { positions, colors, points } = useMemo(() => {
     const positions = new Float32Array(TRAIL_LENGTH * 3)
     const colors = new Float32Array(TRAIL_LENGTH * 3)
     const points = []
-    // Start at homeDir * 3 in local (group) space
-    const sx = homeDir.x * 3
-    const sy = homeDir.y * 3
-    const sz = homeDir.z * 3
+    const { x, y, z } = startPos
     for (let i = 0; i < TRAIL_LENGTH; i++) {
-      points.push(new THREE.Vector3(sx, sy, sz))
-      positions[i * 3] = sx
-      positions[i * 3 + 1] = sy
-      positions[i * 3 + 2] = sz
+      points.push(new THREE.Vector3(x, y, z))
+      positions[i * 3] = x
+      positions[i * 3 + 1] = y
+      positions[i * 3 + 2] = z
     }
     return { positions, colors, points }
-  }, [homeDir])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useFrame((state) => {
     const t = state.clock.elapsedTime
     const agitation = scene.userData.agitation ?? 1.0
 
-    // Interpolated parameters
-    const noiseFreq = 0.15 + agitation * 0.65
-    const stepSize = 0.02 + agitation * 0.05
-    const TARGET_RADIUS = 2.5
+    // Speed scales with agitation; min speed keeps ribbons moving even when calm
+    const speed = 0.03 + agitation * 0.09
 
-    // Head in local space
-    _headLocal.copy(points[0])
-    const distFromOrigin = _headLocal.length()
+    // Move head along current velocity
+    headRef.current.addScaledVector(velRef.current, speed)
 
-    // Noise direction
-    const nx = _headLocal.x * noiseFreq + noiseOffset
-    const ny = _headLocal.y * noiseFreq + noiseOffset
-    const nz = _headLocal.z * noiseFreq + t * 0.5
-
-    const angle = noise3D(nx, ny, nz) * Math.PI * 2
-    const angle2 = noise3D(nx + 100, ny + 100, nz) * Math.PI
-
-    _noiseDir.set(
-      Math.cos(angle) * Math.sin(angle2),
-      Math.sin(angle) * Math.sin(angle2),
-      Math.cos(angle2)
-    )
-
-    _moveDelta.set(0, 0, 0)
-
-    if (agitation > 0) {
-      // Pull toward homeDir * 3
-      _homeTarget.copy(homeDir).multiplyScalar(3)
-      _pullVec.copy(_homeTarget).sub(_headLocal)
-      if (_pullVec.lengthSq() > 0.0001) {
-        _pullVec.normalize().multiplyScalar((0.03 + agitation * 0.02) * agitation)
-        _moveDelta.add(_pullVec)
-      }
-
-      // Spike along homeDir
-      const spikeMag = Math.pow(Math.max(0, Math.sin(t * 4 + noiseOffset)), 3) * 0.15 * agitation
-      _spikeVec.copy(homeDir).multiplyScalar(spikeMag)
-      _moveDelta.add(_spikeVec)
-
-      // Noise contribution (agitated)
-      _moveDelta.addScaledVector(_noiseDir, stepSize * agitation)
+    // Sphere boundary: reflect off the surface normal
+    const dist = headRef.current.length()
+    if (dist >= SPHERE_RADIUS) {
+      _normal.copy(headRef.current).normalize()
+      const dot = velRef.current.dot(_normal)
+      // v' = v - 2(v·n)n
+      velRef.current.addScaledVector(_normal, -2 * dot)
+      // Push back just inside the sphere
+      headRef.current.copy(_normal).multiplyScalar(SPHERE_RADIUS - 0.01)
     }
-
-    if (agitation < 1.0) {
-      const calm = 1.0 - agitation
-      // Tangential orbit
-      const headNorm = _headLocal.clone().normalize()
-      _tangent.crossVectors(headNorm, _upAxis).normalize()
-      _moveDelta.addScaledVector(_tangent, 0.3 * calm * stepSize)
-
-      // Radius correction
-      const radiusError = TARGET_RADIUS - distFromOrigin
-      _moveDelta.addScaledVector(headNorm, radiusError * 0.05 * calm)
-
-      // Soft noise (calm)
-      _moveDelta.addScaledVector(_noiseDir, stepSize * calm * 0.3)
-    }
-
-    _headLocal.add(_moveDelta)
 
     // Shift ring buffer
     for (let i = TRAIL_LENGTH - 1; i > 0; i--) {
       points[i].copy(points[i - 1])
     }
-    points[0].copy(_headLocal)
+    points[0].copy(headRef.current)
 
     // Rainbow hue cycling
     const hue = ((ribbonIndex / RIBBON_COUNT) * 360 + t * 20) % 360
@@ -184,9 +120,28 @@ export default function RibbonBall() {
   const ribbons = useMemo(() => {
     const result = []
     for (let i = 0; i < RIBBON_COUNT; i++) {
-      const homeDir = fibSphereDir(i, RIBBON_COUNT)
-      const noiseOffset = i * 137.508
-      result.push({ ribbonIndex: i, homeDir, noiseOffset })
+      const rng = makeRng(i * 777 + 13)
+
+      // Random start position inside the sphere
+      const r = (0.1 + rng() * 0.7) * SPHERE_RADIUS
+      const theta = rng() * Math.PI * 2
+      const phi = Math.acos(2 * rng() - 1)
+      const startPos = new THREE.Vector3(
+        r * Math.sin(phi) * Math.cos(theta),
+        r * Math.sin(phi) * Math.sin(theta),
+        r * Math.cos(phi)
+      )
+
+      // Random unit velocity
+      const theta2 = rng() * Math.PI * 2
+      const phi2 = Math.acos(2 * rng() - 1)
+      const startVel = new THREE.Vector3(
+        Math.sin(phi2) * Math.cos(theta2),
+        Math.sin(phi2) * Math.sin(theta2),
+        Math.cos(phi2)
+      )
+
+      result.push({ ribbonIndex: i, startPos, startVel })
     }
     return result
   }, [])
@@ -201,7 +156,7 @@ export default function RibbonBall() {
   return (
     <group ref={groupRef}>
       {ribbons.map((props, i) => (
-        <SingleRibbon key={i} {...props} groupRef={groupRef} />
+        <SingleRibbon key={i} {...props} />
       ))}
     </group>
   )
