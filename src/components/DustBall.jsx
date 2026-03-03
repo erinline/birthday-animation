@@ -16,9 +16,12 @@ function makeRng(seed) {
   }
 }
 
+const _col = new THREE.Color()
+
 export default function DustBall() {
   const groupRef = useRef()
   const pointsRef = useRef()
+  const matRef = useRef()
   const { scene } = useThree()
 
   const noise3D = useMemo(() => {
@@ -26,12 +29,13 @@ export default function DustBall() {
     return createNoise3D(rng)
   }, [])
 
-  const { positions, colors, phases, basePositions, baseRadii } = useMemo(() => {
+  const { positions, colors, phases, basePositions, baseRadii, hueBase } = useMemo(() => {
     const positions = new Float32Array(COUNT * 3)
     const colors = new Float32Array(COUNT * 3)
     const phases = new Float32Array(COUNT)
     const basePositions = new Float32Array(COUNT * 3)
-    const baseRadii = new Float32Array(COUNT)  // precomputed |basePos|
+    const baseRadii = new Float32Array(COUNT)
+    const hueBase = new Float32Array(COUNT)
     const rng = makeRng(12345)
 
     for (let i = 0; i < COUNT; i++) {
@@ -51,6 +55,9 @@ export default function DustBall() {
       basePositions[i * 3 + 2] = z
       baseRadii[i] = r
 
+      // Hue spread across sphere by azimuthal angle, 0..1
+      hueBase[i] = (Math.atan2(z, x) / (Math.PI * 2) + 0.5)
+
       colors[i * 3] = 0.03
       colors[i * 3 + 1] = 0.03
       colors[i * 3 + 2] = 0.07
@@ -58,7 +65,7 @@ export default function DustBall() {
       phases[i] = rng() * Math.PI * 2
     }
 
-    return { positions, colors, phases, basePositions, baseRadii }
+    return { positions, colors, phases, basePositions, baseRadii, hueBase }
   }, [])
 
   useFrame((state) => {
@@ -71,10 +78,18 @@ export default function DustBall() {
       groupRef.current.rotation.y = t * 0.05
     }
 
+    // mergeProgress: 0 when balls are far apart, 1 when fully merged at origin.
+    // Drives the opacity→glow transition independently of agitation.
+    const mergeProgress = Math.max(0, 1.0 - Math.abs(dustPos[0]) / 5.0)
+
+    // Material opacity: dense/opaque before merge, more transparent once glowing
+    if (matRef.current) {
+      matRef.current.opacity = 0.92 - mergeProgress * 0.32
+    }
+
     const expandFactor = 1.0 + agitation * 0.1
     const sparkleSpeed = 3.0 + agitation * 3.0
     const noiseScale = 0.0
-    // More visible drift in calm mode so the ball visibly breathes
     const driftAmt = 0.2 + agitation * 0.4 + calm * 0.1
 
     for (let i = 0; i < COUNT; i++) {
@@ -92,20 +107,14 @@ export default function DustBall() {
       positions[i * 3 + 1] = by * expandFactor + ny * driftAmt
       positions[i * 3 + 2] = bz * expandFactor + nz * driftAmt
 
-      // ── Surface ripples (calm mode) ─────────────────────────────────────────
-      // Two wave modes: concentric rings + latitude bands.
-      // Both are strongest for surface particles (surfaceness → 1 at BASE_RADIUS).
+      // ── Surface ripples (calm mode) ──────────────────────────────────────────
       if (calm > 0.5) {
         const surfaceness = baseR / BASE_RADIUS
         const invR = baseR > 0.01 ? 1.0 / baseR : 0.0
 
-        // Concentric ring ripples propagating outward from center
         const ring = Math.sin(baseR * 2.8 - t * 0.7 + phi)
-
-        // Latitude-band ripples using y-component of unit normal as proxy
-        const latProxy = by * invR   // −1..1, 0 at equator
+        const latProxy = by * invR
         const band = Math.sin(latProxy * 5.0 + t * 0.5 + phi * 0.5)
-
         const ripple = (ring * 0.6 + band * 0.4) * calm * 0.32 * surfaceness
 
         positions[i * 3] += bx * invR * ripple
@@ -113,11 +122,23 @@ export default function DustBall() {
         positions[i * 3 + 2] += bz * invR * ripple
       }
 
-      const s = Math.sin(t * sparkleSpeed + phi)
-      const brightness = 0.03 + 0.15 * Math.pow(Math.max(0, s), 8)
-      colors[i * 3] = brightness
-      colors[i * 3 + 1] = brightness
-      colors[i * 3 + 2] = brightness + 0.05
+      // ── Color ────────────────────────────────────────────────────────────────
+      // Hue: azimuthal position on sphere + slow time cycle
+      const hue = (hueBase[i] + t * 0.04) % 1.0
+      _col.setHSL(hue, 1.0, 0.5)
+
+      // Sparkle flash in the particle's own color
+      const sparkle = Math.pow(Math.max(0, Math.sin(t * sparkleSpeed + phi)), 8)
+
+      // Pre-merge: solid brightness ~0.7–1.0 (opaque, no bloom)
+      // Post-merge: multiply up past 1.0 to activate bloom glow
+      const baseBrightness = 0.65 + sparkle * 0.35
+      const glowMultiplier = 1.0 + mergeProgress * 1.8
+      const brightness = baseBrightness * glowMultiplier
+
+      colors[i * 3] = _col.r * brightness
+      colors[i * 3 + 1] = _col.g * brightness
+      colors[i * 3 + 2] = _col.b * brightness
     }
 
     if (pointsRef.current) {
@@ -144,12 +165,13 @@ export default function DustBall() {
           />
         </bufferGeometry>
         <pointsMaterial
+          ref={matRef}
           vertexColors
           size={0.04}
           sizeAttenuation
           toneMapped={false}
           transparent
-          opacity={0.9}
+          opacity={0.92}
         />
       </points>
     </group>
