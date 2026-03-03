@@ -91,7 +91,7 @@ function SingleRibbon({ ribbonIndex, startPos, startVel, orbitAxis }) {
 
     // Rainbow hue cycling
     const hue = ((ribbonIndex / RIBBON_COUNT) * 360 + t * 20) % 360
-    _col.setHSL(hue / 360, 1.0, 0.6)
+    _col.setHSL(hue / 360, 1.0, 0.68)
 
     for (let i = 0; i < TRAIL_LENGTH; i++) {
       const p = points[i]

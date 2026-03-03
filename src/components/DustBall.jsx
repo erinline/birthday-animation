@@ -124,8 +124,9 @@ export default function DustBall() {
 
       // ── Color ────────────────────────────────────────────────────────────────
       // Hue: azimuthal position on sphere + slow time cycle
-      const hue = (hueBase[i] + t * 0.04) % 1.0
-      _col.setHSL(hue, 1.0, 0.5)
+      // Remap to: blue → royal purple → violet → garnet red (no green)
+      const hue = 0.58 + ((hueBase[i] + t * 0.04) % 1.0) * 0.42
+      _col.setHSL(hue, 1.0, 0.28)
 
       // Sparkle flash in the particle's own color
       const sparkle = Math.pow(Math.max(0, Math.sin(t * sparkleSpeed + phi)), 8)
