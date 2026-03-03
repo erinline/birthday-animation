@@ -3,8 +3,8 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { createNoise3D } from 'simplex-noise'
 
-const COUNT = 2000
-const BASE_RADIUS = 2.5
+const COUNT = 5000
+const BASE_RADIUS = 4.0
 
 function makeRng(seed) {
   let s = (seed + 0x6D2B79F5) | 0
@@ -71,11 +71,11 @@ export default function DustBall() {
       groupRef.current.rotation.y = t * 0.05
     }
 
-    const expandFactor = 1.0 + agitation * 0.5
+    const expandFactor = 1.0 + agitation * 0.1
     const sparkleSpeed = 3.0 + agitation * 3.0
-    const noiseScale = 0.15
+    const noiseScale = 0.0
     // More visible drift in calm mode so the ball visibly breathes
-    const driftAmt = 0.2 + agitation * 0.4 + calm * 0.25
+    const driftAmt = 0.2 + agitation * 0.4 + calm * 0.1
 
     for (let i = 0; i < COUNT; i++) {
       const bx = basePositions[i * 3]
@@ -95,16 +95,16 @@ export default function DustBall() {
       // ── Surface ripples (calm mode) ─────────────────────────────────────────
       // Two wave modes: concentric rings + latitude bands.
       // Both are strongest for surface particles (surfaceness → 1 at BASE_RADIUS).
-      if (calm > 0.01) {
+      if (calm > 0.5) {
         const surfaceness = baseR / BASE_RADIUS
         const invR = baseR > 0.01 ? 1.0 / baseR : 0.0
 
         // Concentric ring ripples propagating outward from center
-        const ring = Math.sin(baseR * 2.8 - t * 2.5 + phi)
+        const ring = Math.sin(baseR * 2.8 - t * 0.7 + phi)
 
         // Latitude-band ripples using y-component of unit normal as proxy
         const latProxy = by * invR   // −1..1, 0 at equator
-        const band = Math.sin(latProxy * 5.0 + t * 1.8 + phi * 0.5)
+        const band = Math.sin(latProxy * 5.0 + t * 0.5 + phi * 0.5)
 
         const ripple = (ring * 0.6 + band * 0.4) * calm * 0.32 * surfaceness
 

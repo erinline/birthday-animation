@@ -2,10 +2,10 @@ import { useRef, useMemo } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 
-const RIBBON_COUNT = 30
+const RIBBON_COUNT = 40
 const TRAIL_LENGTH = 80
-const SPHERE_RADIUS = 4.5
-const SOFT_RADIUS = 3.5   // calm mode: gentle return begins here
+const SPHERE_RADIUS = 3.0
+const SOFT_RADIUS = 2.5   // calm mode: gentle return begins here
 
 function makeRng(seed) {
   let s = (seed * 12345 + 999) | 0
