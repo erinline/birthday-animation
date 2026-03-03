@@ -2,10 +2,10 @@ import { useRef, useMemo } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 
-const RIBBON_COUNT = 40
+const RIBBON_COUNT = 20
 const TRAIL_LENGTH = 80
 const SPHERE_RADIUS = 3.0
-const SOFT_RADIUS = 2.5   // calm mode: gentle return begins here
+const SOFT_RADIUS = 2.5
 
 function makeRng(seed) {
   let s = (seed * 12345 + 999) | 0
@@ -18,7 +18,6 @@ function makeRng(seed) {
   }
 }
 
-// Pre-allocated scratch
 const _normal = new THREE.Vector3()
 const _col = new THREE.Color()
 
@@ -48,16 +47,17 @@ function SingleRibbon({ ribbonIndex, startPos, startVel, orbitAxis }) {
     const agitation = scene.userData.agitation ?? 1.0
     const calm = 1.0 - agitation
 
-    // Agitated = fast straight lines; calm = slow arcs
+    // mergeProgress: 0 when far apart, 1 when fully merged
+    const { dustPos = [-7, 0, 0], ribbonPos = [7, 0, 0] } = scene.userData
+    const mergeProgress = Math.max(0, 1.0 - Math.abs(dustPos[0]) / 5.0)
+
     const speed = 0.03 + agitation * 0.09
 
-    // Move head along current velocity
     headRef.current.addScaledVector(velRef.current, speed)
 
     const dist = headRef.current.length()
 
-    // ── Calm mode: soft inward spring past SOFT_RADIUS ──────────────────────
-    // Prevents ribbons from reaching the hard wall; the spring grows with excess.
+    // Soft inward spring (calm mode)
     if (calm > 0.01 && dist > SOFT_RADIUS) {
       _normal.copy(headRef.current).normalize()
       const excess = dist - SOFT_RADIUS
@@ -65,9 +65,7 @@ function SingleRibbon({ ribbonIndex, startPos, startVel, orbitAxis }) {
       velRef.current.normalize()
     }
 
-    // ── Agitated mode: hard sphere reflection ────────────────────────────────
-    // Only fires when ribbons actually reach the wall (calm spring prevents this
-    // when agitation is low, so it naturally fades out during the transition).
+    // Hard sphere reflection (agitated mode)
     if (dist >= SPHERE_RADIUS) {
       _normal.copy(headRef.current).normalize()
       const dot = velRef.current.dot(_normal)
@@ -76,11 +74,43 @@ function SingleRibbon({ ribbonIndex, startPos, startVel, orbitAxis }) {
       headRef.current.copy(_normal).multiplyScalar(SPHERE_RADIUS - 0.01)
     }
 
-    // ── Calm mode: curve velocity around ribbon's unique axis → looping arcs ─
-    // At full calm, each ribbon traces a gentle circular arc in 3D space.
+    // Looping arcs (calm mode)
     if (calm > 0.01) {
       velRef.current.applyAxisAngle(orbitAxis, 0.015 * calm)
       velRef.current.normalize()
+    }
+
+    // ── Dust cluster attraction (post-merge) ─────────────────────────────────
+    // Each ribbon reads the centroid of its own paired dust particles. Those
+    // particles have been pulled toward this ribbon, so their centroid lags just
+    // behind the ribbon head — pulling the ribbon back creates a feedback loop
+    // that warps the arc toward wherever its dust cloud is densest.
+    const rc = scene.userData.ribbonClusters
+    if (rc && mergeProgress > 0.01 && calm > 0.01) {
+      const j3 = ribbonIndex * 3
+      // Cluster centroid is in world space; convert to ribbon-local
+      const cx = rc[j3]     - ribbonPos[0]
+      const cy = rc[j3 + 1] - ribbonPos[1]
+      const cz = rc[j3 + 2] - ribbonPos[2]
+
+      const dx = cx - headRef.current.x
+      const dy = cy - headRef.current.y
+      const dz = cz - headRef.current.z
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.1
+
+      const nudge = mergeProgress * calm * 0.04
+      velRef.current.x += (dx / d) * nudge
+      velRef.current.y += (dy / d) * nudge
+      velRef.current.z += (dz / d) * nudge
+      velRef.current.normalize()
+    }
+
+    // ── Write head position in world space for DustBall to read ──────────────
+    const rh = scene.userData.ribbonHeads
+    if (rh) {
+      rh[ribbonIndex * 3]     = headRef.current.x + ribbonPos[0]
+      rh[ribbonIndex * 3 + 1] = headRef.current.y + ribbonPos[1]
+      rh[ribbonIndex * 3 + 2] = headRef.current.z + ribbonPos[2]
     }
 
     // Shift ring buffer
@@ -89,7 +119,6 @@ function SingleRibbon({ ribbonIndex, startPos, startVel, orbitAxis }) {
     }
     points[0].copy(headRef.current)
 
-    // Rainbow hue cycling
     const hue = ((ribbonIndex / RIBBON_COUNT) * 360 + t * 20) % 360
     _col.setHSL(hue / 360, 1.0, 0.68)
 
@@ -115,18 +144,8 @@ function SingleRibbon({ ribbonIndex, startPos, startVel, orbitAxis }) {
   return (
     <line ref={lineRef}>
       <bufferGeometry>
-        <bufferAttribute
-          attach="attributes-position"
-          array={positions}
-          count={TRAIL_LENGTH}
-          itemSize={3}
-        />
-        <bufferAttribute
-          attach="attributes-color"
-          array={colors}
-          count={TRAIL_LENGTH}
-          itemSize={3}
-        />
+        <bufferAttribute attach="attributes-position" array={positions} count={TRAIL_LENGTH} itemSize={3} />
+        <bufferAttribute attach="attributes-color" array={colors} count={TRAIL_LENGTH} itemSize={3} />
       </bufferGeometry>
       <lineBasicMaterial vertexColors toneMapped={false} />
     </line>
@@ -137,12 +156,17 @@ export default function RibbonBall() {
   const groupRef = useRef()
   const { scene } = useThree()
 
+  // Allocate shared ribbon-heads array once; SingleRibbons write into it each frame
+  useMemo(() => {
+    scene.userData.ribbonHeads = new Float32Array(RIBBON_COUNT * 3)
+    scene.userData.ribbonClusters = new Float32Array(RIBBON_COUNT * 3)
+  }, [scene])
+
   const ribbons = useMemo(() => {
     const result = []
     for (let i = 0; i < RIBBON_COUNT; i++) {
       const rng = makeRng(i * 777 + 13)
 
-      // Random start position scattered inside sphere
       const r = (0.1 + rng() * 0.7) * SPHERE_RADIUS
       const theta = rng() * Math.PI * 2
       const phi = Math.acos(2 * rng() - 1)
@@ -152,7 +176,6 @@ export default function RibbonBall() {
         r * Math.cos(phi)
       )
 
-      // Random unit velocity
       const theta2 = rng() * Math.PI * 2
       const phi2 = Math.acos(2 * rng() - 1)
       const startVel = new THREE.Vector3(
@@ -161,7 +184,6 @@ export default function RibbonBall() {
         Math.cos(phi2)
       )
 
-      // Unique orbit axis for calm-mode arcs — different plane per ribbon
       const theta3 = rng() * Math.PI * 2
       const phi3 = Math.acos(2 * rng() - 1)
       const orbitAxis = new THREE.Vector3(
