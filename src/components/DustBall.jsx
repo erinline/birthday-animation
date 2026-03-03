@@ -26,11 +26,12 @@ export default function DustBall() {
     return createNoise3D(rng)
   }, [])
 
-  const { positions, colors, phases, basePositions } = useMemo(() => {
+  const { positions, colors, phases, basePositions, baseRadii } = useMemo(() => {
     const positions = new Float32Array(COUNT * 3)
     const colors = new Float32Array(COUNT * 3)
     const phases = new Float32Array(COUNT)
     const basePositions = new Float32Array(COUNT * 3)
+    const baseRadii = new Float32Array(COUNT)  // precomputed |basePos|
     const rng = makeRng(12345)
 
     for (let i = 0; i < COUNT; i++) {
@@ -48,6 +49,7 @@ export default function DustBall() {
       basePositions[i * 3] = x
       basePositions[i * 3 + 1] = y
       basePositions[i * 3 + 2] = z
+      baseRadii[i] = r
 
       colors[i * 3] = 0.03
       colors[i * 3 + 1] = 0.03
@@ -56,12 +58,13 @@ export default function DustBall() {
       phases[i] = rng() * Math.PI * 2
     }
 
-    return { positions, colors, phases, basePositions }
+    return { positions, colors, phases, basePositions, baseRadii }
   }, [])
 
   useFrame((state) => {
     const t = state.clock.elapsedTime
     const { agitation = 1.0, dustPos = [-7, 0, 0] } = scene.userData
+    const calm = 1.0 - agitation
 
     if (groupRef.current) {
       groupRef.current.position.set(dustPos[0], dustPos[1], dustPos[2])
@@ -71,13 +74,15 @@ export default function DustBall() {
     const expandFactor = 1.0 + agitation * 0.5
     const sparkleSpeed = 3.0 + agitation * 3.0
     const noiseScale = 0.15
-    const driftAmt = 0.2 + agitation * 0.4
+    // More visible drift in calm mode so the ball visibly breathes
+    const driftAmt = 0.2 + agitation * 0.4 + calm * 0.25
 
     for (let i = 0; i < COUNT; i++) {
       const bx = basePositions[i * 3]
       const by = basePositions[i * 3 + 1]
       const bz = basePositions[i * 3 + 2]
       const phi = phases[i]
+      const baseR = baseRadii[i]
 
       const nx = noise3D(bx * noiseScale + t * 0.1, by * noiseScale, phi)
       const ny = noise3D(bx * noiseScale, by * noiseScale + t * 0.1, phi + 10)
@@ -86,6 +91,27 @@ export default function DustBall() {
       positions[i * 3] = bx * expandFactor + nx * driftAmt
       positions[i * 3 + 1] = by * expandFactor + ny * driftAmt
       positions[i * 3 + 2] = bz * expandFactor + nz * driftAmt
+
+      // ── Surface ripples (calm mode) ─────────────────────────────────────────
+      // Two wave modes: concentric rings + latitude bands.
+      // Both are strongest for surface particles (surfaceness → 1 at BASE_RADIUS).
+      if (calm > 0.01) {
+        const surfaceness = baseR / BASE_RADIUS
+        const invR = baseR > 0.01 ? 1.0 / baseR : 0.0
+
+        // Concentric ring ripples propagating outward from center
+        const ring = Math.sin(baseR * 2.8 - t * 2.5 + phi)
+
+        // Latitude-band ripples using y-component of unit normal as proxy
+        const latProxy = by * invR   // −1..1, 0 at equator
+        const band = Math.sin(latProxy * 5.0 + t * 1.8 + phi * 0.5)
+
+        const ripple = (ring * 0.6 + band * 0.4) * calm * 0.32 * surfaceness
+
+        positions[i * 3] += bx * invR * ripple
+        positions[i * 3 + 1] += by * invR * ripple
+        positions[i * 3 + 2] += bz * invR * ripple
+      }
 
       const s = Math.sin(t * sparkleSpeed + phi)
       const brightness = 0.03 + 0.15 * Math.pow(Math.max(0, s), 8)

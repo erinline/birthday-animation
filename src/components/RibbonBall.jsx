@@ -5,6 +5,7 @@ import * as THREE from 'three'
 const RIBBON_COUNT = 30
 const TRAIL_LENGTH = 80
 const SPHERE_RADIUS = 4.5
+const SOFT_RADIUS = 3.5   // calm mode: gentle return begins here
 
 function makeRng(seed) {
   let s = (seed * 12345 + 999) | 0
@@ -21,7 +22,7 @@ function makeRng(seed) {
 const _normal = new THREE.Vector3()
 const _col = new THREE.Color()
 
-function SingleRibbon({ ribbonIndex, startPos, startVel }) {
+function SingleRibbon({ ribbonIndex, startPos, startVel, orbitAxis }) {
   const { scene } = useThree()
   const lineRef = useRef()
   const headRef = useRef(startPos.clone())
@@ -45,22 +46,41 @@ function SingleRibbon({ ribbonIndex, startPos, startVel }) {
   useFrame((state) => {
     const t = state.clock.elapsedTime
     const agitation = scene.userData.agitation ?? 1.0
+    const calm = 1.0 - agitation
 
-    // Speed scales with agitation; min speed keeps ribbons moving even when calm
+    // Agitated = fast straight lines; calm = slow arcs
     const speed = 0.03 + agitation * 0.09
 
     // Move head along current velocity
     headRef.current.addScaledVector(velRef.current, speed)
 
-    // Sphere boundary: reflect off the surface normal
     const dist = headRef.current.length()
+
+    // ── Calm mode: soft inward spring past SOFT_RADIUS ──────────────────────
+    // Prevents ribbons from reaching the hard wall; the spring grows with excess.
+    if (calm > 0.01 && dist > SOFT_RADIUS) {
+      _normal.copy(headRef.current).normalize()
+      const excess = dist - SOFT_RADIUS
+      velRef.current.addScaledVector(_normal, -excess * 0.018 * calm)
+      velRef.current.normalize()
+    }
+
+    // ── Agitated mode: hard sphere reflection ────────────────────────────────
+    // Only fires when ribbons actually reach the wall (calm spring prevents this
+    // when agitation is low, so it naturally fades out during the transition).
     if (dist >= SPHERE_RADIUS) {
       _normal.copy(headRef.current).normalize()
       const dot = velRef.current.dot(_normal)
-      // v' = v - 2(v·n)n
       velRef.current.addScaledVector(_normal, -2 * dot)
-      // Push back just inside the sphere
+      velRef.current.normalize()
       headRef.current.copy(_normal).multiplyScalar(SPHERE_RADIUS - 0.01)
+    }
+
+    // ── Calm mode: curve velocity around ribbon's unique axis → looping arcs ─
+    // At full calm, each ribbon traces a gentle circular arc in 3D space.
+    if (calm > 0.01) {
+      velRef.current.applyAxisAngle(orbitAxis, 0.015 * calm)
+      velRef.current.normalize()
     }
 
     // Shift ring buffer
@@ -122,7 +142,7 @@ export default function RibbonBall() {
     for (let i = 0; i < RIBBON_COUNT; i++) {
       const rng = makeRng(i * 777 + 13)
 
-      // Random start position inside the sphere
+      // Random start position scattered inside sphere
       const r = (0.1 + rng() * 0.7) * SPHERE_RADIUS
       const theta = rng() * Math.PI * 2
       const phi = Math.acos(2 * rng() - 1)
@@ -141,7 +161,16 @@ export default function RibbonBall() {
         Math.cos(phi2)
       )
 
-      result.push({ ribbonIndex: i, startPos, startVel })
+      // Unique orbit axis for calm-mode arcs — different plane per ribbon
+      const theta3 = rng() * Math.PI * 2
+      const phi3 = Math.acos(2 * rng() - 1)
+      const orbitAxis = new THREE.Vector3(
+        Math.sin(phi3) * Math.cos(theta3),
+        Math.sin(phi3) * Math.sin(theta3),
+        Math.cos(phi3)
+      )
+
+      result.push({ ribbonIndex: i, startPos, startVel, orbitAxis })
     }
     return result
   }, [])

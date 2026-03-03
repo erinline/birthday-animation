@@ -45,7 +45,7 @@ export default function App() {
         style={{ width: '100%', height: '100%', background: '#000' }}
         gl={{ antialias: true }}
         dpr={[1, 2]}
-        camera={{ position: [-7, 0, 12], fov: 60 }}
+        camera={{ position: [-7, 0, 12], fov: 30 }}
       >
         <Scene timelineRef={timelineRef} onPhaseChange={setUiPhase} />
       </Canvas>
