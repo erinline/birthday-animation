@@ -198,9 +198,10 @@ export default function RibbonBall() {
   }, [])
 
   useFrame(() => {
-    const { ribbonPos = [7, 0, 0] } = scene.userData
+    const { ribbonPos = [7, 0, 0], ballScale = 1.0 } = scene.userData
     if (groupRef.current) {
       groupRef.current.position.set(ribbonPos[0], ribbonPos[1], ribbonPos[2])
+      groupRef.current.scale.setScalar(ballScale)
     }
   })
 

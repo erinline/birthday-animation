@@ -84,6 +84,8 @@ export default function DustBall() {
     if (groupRef.current) {
       groupRef.current.position.set(dustPos[0], dustPos[1], dustPos[2])
       groupRef.current.rotation.y = t * 0.05
+      const ballScale = scene.userData.ballScale ?? 1.0
+      groupRef.current.scale.setScalar(ballScale)
     }
 
     const mergeProgress = Math.max(0, 1.0 - Math.abs(dustPos[0]) / 5.0)
