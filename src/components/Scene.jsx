@@ -11,6 +11,11 @@ function smoothstep(t) {
   return t * t * (3 - 2 * t)
 }
 
+function smootherstep(t) {
+  t = Math.max(0, Math.min(1, t))
+  return t * t * t * (t * (t * 6 - 15) + 10)
+}
+
 function lerp(a, b, t) {
   return a + (b - a) * t
 }
@@ -126,11 +131,28 @@ export default function Scene({ timelineRef, onPhaseChange }) {
     // --- Ball scale (condense → flash → expand) ---
     let ballScale = 1.0
     if (p === 'CONDENSE') {
-      ballScale = lerp(1.0, 0.04, easeInOut(Math.min(elapsed / 1.8, 1)))
+      // Anticipation: smoothstep up to 1.12 (zero velocity at peak),
+      // then easeInOut down to 0.04 (zero velocity at start of collapse).
+      // Both sides have zero derivative at the join → no stutter.
+      const t = Math.min(elapsed / 1.8, 1)
+      if (t < 0.2) {
+        ballScale = lerp(1.0, 1.12, smoothstep(t / 0.2))
+      } else {
+        ballScale = lerp(1.12, 0.04, easeInOut((t - 0.2) / 0.8))
+      }
     } else if (p === 'EXPLOSION' || p === 'FLASH_TEXT') {
       ballScale = 0.03
     } else if (p === 'SETTLE') {
-      ballScale = easeInOut(Math.min(elapsed / 3.5, 1))
+      // Explosive expand: quartic easeOut rockets to overshoot (0 velocity at peak),
+      // then smoothstep glides back to 1.0 (0 velocity at start) — smooth join.
+      const t = Math.min(elapsed / 6.0, 1)
+      if (t < 0.18) {
+        const s = t / 0.18
+        ballScale = lerp(0.03, 1.22, 1 - Math.pow(1 - s, 4))
+      } else {
+        const s = (t - 0.18) / 0.82
+        ballScale = lerp(1.22, 1.0, smootherstep(s))
+      }
     }
 
     // --- Pulse intensity (bell curve over EXPLOSION phase) ---
