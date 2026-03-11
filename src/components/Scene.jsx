@@ -91,14 +91,14 @@ export default function Scene({ timelineRef, onPhaseChange }) {
         }
         break
       case 'FLASH_TEXT':
-        if (tl.phaseElapsed > 8.0) {
+        if (tl.phaseElapsed > 6.0) {
           tl.phase = 'SETTLE'; tl.phaseElapsed = 0
-          onPhaseChange('CALM')
         }
         break
       case 'SETTLE':
         if (tl.phaseElapsed > 6.0) {
           tl.phase = 'CALM'; tl.phaseElapsed = 0
+          onPhaseChange('CALM')
         }
         break
     }

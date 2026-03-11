@@ -1,8 +1,25 @@
 import { Canvas } from '@react-three/fiber'
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import Scene from './components/Scene'
 
-function NarrativeText({ text }) {
+function NarrativeText({ text, duration = 4, xPos = 0.5 }) {
+  const [displayed, setDisplayed] = useState('')
+  const [fading, setFading] = useState(false)
+
+  useEffect(() => {
+    setDisplayed('')
+    setFading(false)
+    const revealMs = (duration * 0.45 * 1000) / text.length
+    let i = 0
+    const reveal = setInterval(() => {
+      i++
+      setDisplayed(text.slice(0, i))
+      if (i >= text.length) clearInterval(reveal)
+    }, revealMs)
+    const fadeTimer = setTimeout(() => setFading(true), duration * 0.78 * 1000)
+    return () => { clearInterval(reveal); clearTimeout(fadeTimer) }
+  }, [text, duration])
+
   return (
     <div style={{
       position: 'absolute',
@@ -14,16 +31,22 @@ function NarrativeText({ text }) {
       pointerEvents: 'none',
     }}>
       <p style={{
-        display: 'inline-block',
         margin: 0,
+        maxWidth: '660px',
+        textAlign: 'center',
+        position: 'absolute',
+        left: `${xPos * 100}%`,
+        transform: 'translateX(-50%)',
         color: 'rgba(255, 255, 255, 0.72)',
         fontSize: '2.15rem',
         fontFamily: 'Georgia, serif',
         fontStyle: 'italic',
         letterSpacing: '0.1em',
-        animation: 'bday-narrate 4s ease-out both',
+        lineHeight: '1.6',
+        transition: fading ? `opacity ${duration * 0.22}s ease-out` : 'none',
+        opacity: fading ? 0 : 0.72,
       }}>
-        {text}
+        {displayed}
       </p>
     </div>
   )
@@ -78,19 +101,19 @@ export default function App() {
       )}
 
       {uiPhase === 'DUST_TEXT' && (
-        <NarrativeText text="before, being was doing a big quiet" />
+        <NarrativeText text="before, being was doing a big quiet" xPos={0.25}/>
       )}
 
       {uiPhase === 'RIBBON_TEXT' && (
-        <NarrativeText text="and ego was like wew panko pew-- so many jibbers, she was mostly only jabber" />
+        <NarrativeText text="and ego was like wew panko pew-- so many jibbers, she was mostly only jabber" xPos={0.75}/>
       )}
 
       {uiPhase === 'TOGETHER_TEXT' && (
-        <NarrativeText text="but when they met... something new Happened" />
+        <NarrativeText text="but when they met... something new Happened" xPos={0.5}/>
       )}
 
       {uiPhase === 'EXPLOSION_TEXT' && (
-        <NarrativeText text="being saw new things, through movement. ego learned presence. and they didn't live happily ever after, past tense. they're living now, and there is only now." />
+        <NarrativeText text="being saw new things, through movement. ego learned presence. and they didn't live happily ever after, past tense. they're living now, and there is only now." duration={12.0} xPos={0.25}/>
       )}
       
       {uiPhase === 'CALM' && (
@@ -121,14 +144,7 @@ export default function App() {
           0%, 100% { opacity: 0.35; }
           50% { opacity: 0.9; }
         }
-        @keyframes bday-narrate {
-          0%   { clip-path: inset(0 100% 0 0); opacity: 0; }
-          6%   { opacity: 0.72; }
-          40%  { clip-path: inset(0 0% 0 0); opacity: 0.72; }
-          78%  { clip-path: inset(0 0% 0 0); opacity: 0.72; }
-          100% { clip-path: inset(0 0% 0 0); opacity: 0; }
-        }
-        @keyframes bday-fadein {
+@keyframes bday-fadein {
           from { opacity: 0; transform: translateY(12px); }
           to   { opacity: 1; transform: translateY(0); }
         }
