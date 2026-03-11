@@ -66,8 +66,17 @@ export default function Scene({ timelineRef, onPhaseChange }) {
           onPhaseChange('RUNNING')
         }
         break
+      case 'TOGETHER_TEXT':
+        if (tl.phaseElapsed > 4.5) {
+          tl.phase = 'APPROACH'; tl.phaseElapsed = 0
+          onPhaseChange('RUNNING')
+        }
+        break
       case 'ZOOM_OUT':
-        if (tl.phaseElapsed > 3.0) { tl.phase = 'APPROACH'; tl.phaseElapsed = 0 }
+        if (tl.phaseElapsed > 3.0) {
+          tl.phase = 'TOGETHER_TEXT'; tl.phaseElapsed = 0
+          onPhaseChange('TOGETHER_TEXT')
+        }
         break
       case 'APPROACH':
         if (tl.phaseElapsed > 4.0) { tl.phase = 'CONDENSE'; tl.phaseElapsed = 0 }
@@ -77,6 +86,12 @@ export default function Scene({ timelineRef, onPhaseChange }) {
         break
       case 'EXPLOSION':
         if (tl.phaseElapsed > 1.2) {
+          tl.phase = 'FLASH_TEXT'; tl.phaseElapsed = 0
+          onPhaseChange('EXPLOSION_TEXT')
+        }
+        break
+      case 'FLASH_TEXT':
+        if (tl.phaseElapsed > 8.0) {
           tl.phase = 'SETTLE'; tl.phaseElapsed = 0
           onPhaseChange('CALM')
         }
@@ -95,11 +110,15 @@ export default function Scene({ timelineRef, onPhaseChange }) {
     let dustPos = [-7, 0, 0]
     let ribbonPos = [7, 0, 0]
 
-    if (p === 'APPROACH') {
-      const t = easeInOut(Math.min(elapsed / 4.0, 1))
+    if (p === 'TOGETHER_TEXT') {
+      const t = easeInOut(Math.min(elapsed / 8.5, 1))
       dustPos = [lerp(-7, 0, t), 0, 0]
       ribbonPos = [lerp(7, 0, t), 0, 0]
-    } else if (p === 'CONDENSE' || p === 'EXPLOSION' || p === 'SETTLE' || p === 'CALM') {
+    } else if (p === 'APPROACH') {
+      const t = easeInOut(Math.min((4.5 + elapsed) / 8.5, 1))
+      dustPos = [lerp(-7, 0, t), 0, 0]
+      ribbonPos = [lerp(7, 0, t), 0, 0]
+    } else if (p === 'CONDENSE' || p === 'EXPLOSION' || p === 'FLASH_TEXT' || p === 'SETTLE' || p === 'CALM') {
       dustPos = [0, 0, 0]
       ribbonPos = [0, 0, 0]
     }
@@ -108,7 +127,7 @@ export default function Scene({ timelineRef, onPhaseChange }) {
     let ballScale = 1.0
     if (p === 'CONDENSE') {
       ballScale = lerp(1.0, 0.04, easeInOut(Math.min(elapsed / 1.8, 1)))
-    } else if (p === 'EXPLOSION') {
+    } else if (p === 'EXPLOSION' || p === 'FLASH_TEXT') {
       ballScale = 0.03
     } else if (p === 'SETTLE') {
       ballScale = easeInOut(Math.min(elapsed / 3.5, 1))
@@ -123,7 +142,7 @@ export default function Scene({ timelineRef, onPhaseChange }) {
 
     // --- Agitation ---
     let agitation = 0.0
-    if (p === 'RIBBON_TEXT' || p === 'ZOOM_OUT' || p === 'APPROACH' || p === 'CONDENSE' || p === 'EXPLOSION') {
+    if (p === 'RIBBON_TEXT' || p === 'ZOOM_OUT' || p === 'APPROACH' || p === 'CONDENSE' || p === 'EXPLOSION' || p === 'TOGETHER_TEXT') {
       agitation = 1.0
     } else if (p === 'SWIPE') {
       agitation = easeInOut(Math.min(elapsed / 0.4, 1))
@@ -138,6 +157,8 @@ export default function Scene({ timelineRef, onPhaseChange }) {
     } else if (p === 'EXPLOSION') {
       const t = elapsed / 1.2
       bloomIntensity = 4.0 + Math.sin(t * Math.PI) * 26.0
+    } else if (p === 'FLASH_TEXT') {
+      bloomIntensity = lerp(4.0, 1.5, Math.min(elapsed / 5.0, 1))
     } else if (p === 'SETTLE') {
       bloomIntensity = lerp(4.0, 1.5, Math.min(elapsed / 6.0, 1))
     }
@@ -168,6 +189,7 @@ export default function Scene({ timelineRef, onPhaseChange }) {
         lookX = lerp(7, 0, t)
         break
       }
+      case 'TOGETHER_TEXT':
       case 'APPROACH':
         camX = 0; camZ = 22; lookX = 0
         break
@@ -185,6 +207,9 @@ export default function Scene({ timelineRef, onPhaseChange }) {
         lookX = 0
         break
       }
+      case 'FLASH_TEXT':
+        camX = 0; camZ = 17; lookX = 0
+        break
       case 'SETTLE': {
         const t = smoothstep(Math.min(elapsed / 6.0, 1))
         camX = 0

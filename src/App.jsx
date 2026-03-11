@@ -78,13 +78,21 @@ export default function App() {
       )}
 
       {uiPhase === 'DUST_TEXT' && (
-        <NarrativeText text="before, calm, undisturbed" />
+        <NarrativeText text="before, being was doing a big quiet" />
       )}
 
       {uiPhase === 'RIBBON_TEXT' && (
-        <NarrativeText text="and i was adrift" />
+        <NarrativeText text="and ego was like wew panko pew-- so many jibbers, she was mostly only jabber" />
       )}
 
+      {uiPhase === 'TOGETHER_TEXT' && (
+        <NarrativeText text="but when they met... something new Happened" />
+      )}
+
+      {uiPhase === 'EXPLOSION_TEXT' && (
+        <NarrativeText text="being saw new things, through movement. ego learned presence. and they didn't live happily ever after, past tense. they're living now, and there is only now." />
+      )}
+      
       {uiPhase === 'CALM' && (
         <div style={{
           position: 'absolute',
@@ -103,7 +111,7 @@ export default function App() {
             margin: 0,
             textShadow: '0 0 40px rgba(255,255,255,0.4)',
           }}>
-            Happy Birthday
+            heppy bridthday, ilyew gos
           </p>
         </div>
       )}
