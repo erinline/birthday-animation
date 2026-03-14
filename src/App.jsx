@@ -38,7 +38,7 @@ function NarrativeText({ text, duration = 4, xPos = 0.5 }) {
         left: `${xPos * 100}%`,
         transform: 'translateX(-50%)',
         color: 'rgba(255, 255, 255, 0.72)',
-        fontSize: '2.15rem',
+        fontSize: 'clamp(1rem, 4vw, 2.15rem)',
         fontFamily: 'Georgia, serif',
         fontStyle: 'italic',
         letterSpacing: '0.1em',
@@ -70,7 +70,7 @@ export default function App() {
   }
 
   return (
-    <div ref={wrapperRef} style={{ position: 'relative', width: '100vw', height: '100vh' }}>
+    <div ref={wrapperRef} style={{ position: 'relative', width: '100vw', height: '100dvh' }}>
       <Canvas
         style={{ width: '100%', height: '100%', background: '#000' }}
         gl={{ antialias: true }}
@@ -95,7 +95,7 @@ export default function App() {
         >
           <p style={{
             color: 'rgba(255,255,255,0.7)',
-            fontSize: '1.2rem',
+            fontSize: 'clamp(0.85rem, 3vw, 1.2rem)',
             letterSpacing: '0.18em',
             textTransform: 'uppercase',
             fontFamily: 'system-ui, sans-serif',
@@ -134,7 +134,7 @@ export default function App() {
         }}>
           <p style={{
             color: 'white',
-            fontSize: '3rem',
+            fontSize: 'clamp(1.5rem, 6vw, 3rem)',
             fontFamily: 'Georgia, serif',
             letterSpacing: ' 0.08em',
             animation: 'bday-fadein 1.5s ease-out 1s both',
