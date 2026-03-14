@@ -55,15 +55,22 @@ function NarrativeText({ text, duration = 4, xPos = 0.5 }) {
 export default function App() {
   const timelineRef = useRef({ started: false, phase: 'IDLE', phaseElapsed: 0 })
   const [uiPhase, setUiPhase] = useState('IDLE')
+  const wrapperRef = useRef(null)
 
   function handleClick() {
     if (uiPhase === 'IDLE') {
+      const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768
+      if (isMobile && wrapperRef.current) {
+        const el = wrapperRef.current
+        const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen
+        if (req) req.call(el).catch(() => {})
+      }
       timelineRef.current.started = true
     }
   }
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
+    <div ref={wrapperRef} style={{ position: 'relative', width: '100vw', height: '100vh' }}>
       <Canvas
         style={{ width: '100%', height: '100%', background: '#000' }}
         gl={{ antialias: true }}
